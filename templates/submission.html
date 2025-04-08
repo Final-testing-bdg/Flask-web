@@ -4,27 +4,110 @@
 
 {% block extra_css %}
 <style>
-    .json-key {
-        color: #8839ef;
-        font-weight: bold;
+    /* Discord-inspired styling */
+    .webhook-card {
+        border-radius: 8px;
+        margin-bottom: 16px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
     }
-    .json-value-string {
-        color: #40a02b;
+    
+    .webhook-card-header {
+        padding: 12px 16px;
+        background-color: #5865F2;
+        color: white;
+        font-weight: 600;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     }
-    .json-value-number {
-        color: #fe640b;
+    
+    .webhook-card-body {
+        background-color: #ffffff;
+        padding: 16px;
     }
-    .json-value-boolean {
-        color: #1e66f5;
+    
+    .webhook-section {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #EBEDEF;
     }
-    .json-value-null {
-        color: #6c757d;
+    
+    .webhook-section:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
     }
-    .json-viewer {
-        background-color: #f8f9fa;
+    
+    .webhook-field {
+        margin-bottom: 12px;
+    }
+    
+    .webhook-field-name {
+        font-weight: 600;
+        color: #4F5660;
+        margin-bottom: 4px;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+    }
+    
+    .webhook-field-value {
+        color: #2E3338;
+        word-break: break-word;
+    }
+    
+    .webhook-field-value-object {
+        background-color: #F6F6F7;
+        border-radius: 4px;
+        padding: 12px;
+    }
+    
+    .webhook-toggle {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .webhook-toggle:hover {
+        text-decoration: underline;
+    }
+    
+    .webhook-array-item {
+        border-left: 3px solid #5865F2;
+        padding-left: 12px;
+        margin-bottom: 8px;
+    }
+    
+    .webhook-array-index {
+        font-size: 0.8rem;
+        color: #72767D;
+        margin-bottom: 4px;
+    }
+    
+    .webhook-url {
+        color: #00a8fc;
+        text-decoration: none;
+    }
+    
+    .webhook-url:hover {
+        text-decoration: underline;
+    }
+    
+    .webhook-timestamp {
+        color: #72767D;
+        font-size: 0.9rem;
+    }
+    
+    .webhook-empty {
+        color: #72767D;
+        font-style: italic;
+    }
+    
+    /* Raw JSON view styling */
+    .raw-json {
+        background-color: #2F3136;
+        color: #DCDDDE;
         border-radius: 4px;
         padding: 15px;
         font-family: monospace;
+        overflow-x: auto;
     }
 </style>
 {% endblock %}
@@ -53,7 +136,7 @@
     <div class="row">
         <div class="col-md-6">
             <strong><i class="fas fa-calendar me-1"></i>Timestamp:</strong> 
-            {{ submission_meta.timestamp }}
+            <span class="webhook-timestamp">{{ submission_meta.timestamp }}</span>
         </div>
         <div class="col-md-6">
             <strong><i class="fas fa-file-alt me-1"></i>ID:</strong> 
@@ -68,12 +151,12 @@
         <ul class="nav nav-tabs card-header-tabs" id="dataTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="formatted-tab" data-bs-toggle="tab" data-bs-target="#formatted" type="button" role="tab" aria-controls="formatted" aria-selected="true">
-                    <i class="fas fa-table me-1"></i>Formatted View
+                    <i class="fas fa-th-large me-1"></i>Discord Style
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw" type="button" role="tab" aria-controls="raw" aria-selected="false">
-                    <i class="fas fa-code me-1"></i>Raw View
+                    <i class="fas fa-code me-1"></i>Raw JSON
                 </button>
             </li>
         </ul>
@@ -81,11 +164,11 @@
     <div class="card-body">
         <div class="tab-content" id="dataTabsContent">
             <div class="tab-pane fade show active" id="formatted" role="tabpanel" aria-labelledby="formatted-tab">
-                <div id="jsonViewer" class="json-viewer"></div>
+                <div id="webhookViewer"></div>
             </div>
             
             <div class="tab-pane fade" id="raw" role="tabpanel" aria-labelledby="raw-tab">
-                <pre id="rawJson" class="bg-dark text-light p-3">{{ data|tojson(indent=2) }}</pre>
+                <pre id="rawJson" class="raw-json">{{ data|tojson(indent=2) }}</pre>
             </div>
         </div>
     </div>
@@ -94,61 +177,252 @@
 
 {% block extra_js %}
 <script>
-    // Function to recursively format JSON data for display
-    function formatJSON(obj, level = 0) {
-        const indent = '  '.repeat(level);
+    // Helper function to format field names for display
+    function formatFieldName(name) {
+        // Convert camelCase or snake_case to Title Case With Spaces
+        return name
+            .replace(/([A-Z])/g, ' $1') // Insert space before capital letters
+            .replace(/_/g, ' ') // Replace underscores with spaces
+            .replace(/^\w/, c => c.toUpperCase()) // Capitalize first letter
+            .trim();
+    }
+    
+    // Check if a string is a URL
+    function isUrl(str) {
+        try {
+            const url = new URL(str);
+            return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    }
+    
+    // Check if a string is an ISO date
+    function isIsoDate(str) {
+        if (typeof str !== 'string') return false;
+        const isoDatePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/;
+        return isoDatePattern.test(str);
+    }
+    
+    // Format a date for display
+    function formatDate(dateStr) {
+        try {
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        } catch {
+            return dateStr;
+        }
+    }
+    
+    // Format a value based on its type
+    function formatValue(value) {
+        if (value === null) {
+            return '<span class="webhook-empty">null</span>';
+        }
+        
+        if (value === undefined) {
+            return '<span class="webhook-empty">undefined</span>';
+        }
+        
+        if (typeof value === 'string') {
+            if (value === '') {
+                return '<span class="webhook-empty">Empty string</span>';
+            }
+            
+            if (isUrl(value)) {
+                return `<a href="${value}" class="webhook-url" target="_blank">${value}</a>`;
+            }
+            
+            if (isIsoDate(value)) {
+                return `<span class="webhook-timestamp">${formatDate(value)}</span>`;
+            }
+            
+            return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        
+        if (typeof value === 'number') {
+            return value.toString();
+        }
+        
+        if (typeof value === 'boolean') {
+            return value ? 'Yes' : 'No';
+        }
+        
+        return value.toString();
+    }
+    
+    // Generate HTML for an object in Discord style
+    function generateObjectHtml(obj, isTopLevel = false) {
         let html = '';
         
-        if (Array.isArray(obj)) {
-            if (obj.length === 0) {
-                html += '[]';
-            } else {
-                html += '[\n';
-                obj.forEach((item, i) => {
-                    html += indent + '  ';
-                    html += formatJSON(item, level + 1);
-                    if (i < obj.length - 1) {
-                        html += ',';
-                    }
-                    html += '\n';
-                });
-                html += indent + ']';
-            }
-        } else if (obj === null) {
-            html += '<span class="json-value-null">null</span>';
-        } else if (typeof obj === 'object') {
-            if (Object.keys(obj).length === 0) {
-                html += '{}';
-            } else {
-                html += '{\n';
-                const keys = Object.keys(obj);
-                keys.forEach((key, i) => {
-                    html += indent + '  ' + '<span class="json-key">"' + key + '"</span>: ';
-                    html += formatJSON(obj[key], level + 1);
-                    if (i < keys.length - 1) {
-                        html += ',';
-                    }
-                    html += '\n';
-                });
-                html += indent + '}';
-            }
-        } else if (typeof obj === 'string') {
-            html += '<span class="json-value-string">"' + obj.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '"</span>';
-        } else if (typeof obj === 'number') {
-            html += '<span class="json-value-number">' + obj + '</span>';
-        } else if (typeof obj === 'boolean') {
-            html += '<span class="json-value-boolean">' + obj + '</span>';
+        if (isTopLevel) {
+            const keys = Object.keys(obj);
+            keys.forEach((key, index) => {
+                html += generateSectionHtml(key, obj[key]);
+            });
         } else {
-            html += obj;
+            html += '<div class="webhook-field-value-object">';
+            const keys = Object.keys(obj);
+            keys.forEach((key, index) => {
+                html += generateFieldHtml(key, obj[key]);
+            });
+            html += '</div>';
+        }
+        
+        return html;
+    }
+    
+    // Generate HTML for a section (top-level object properties)
+    function generateSectionHtml(key, value) {
+        // Skip the _meta key since we display that info elsewhere
+        if (key === '_meta') return '';
+        
+        const sectionId = `section-${key.replace(/\s+/g, '-').toLowerCase()}`;
+        let html = `<div class="webhook-card">`;
+        
+        // Card header
+        html += `<div class="webhook-card-header">${formatFieldName(key)}</div>`;
+        
+        // Card body
+        html += `<div class="webhook-card-body" id="${sectionId}">`;
+        
+        if (typeof value === 'object' && value !== null) {
+            if (Array.isArray(value)) {
+                if (value.length === 0) {
+                    html += `<span class="webhook-empty">No items</span>`;
+                } else {
+                    html += generateArrayHtml(value);
+                }
+            } else {
+                const subKeys = Object.keys(value);
+                if (subKeys.length === 0) {
+                    html += `<span class="webhook-empty">Empty object</span>`;
+                } else {
+                    subKeys.forEach((subKey) => {
+                        html += generateFieldHtml(subKey, value[subKey]);
+                    });
+                }
+            }
+        } else {
+            html += `<div class="webhook-field-value">${formatValue(value)}</div>`;
+        }
+        
+        html += `</div>`; // Close card body
+        html += `</div>`; // Close card
+        
+        return html;
+    }
+    
+    // Generate HTML for a field (key-value pair)
+    function generateFieldHtml(key, value) {
+        let html = `<div class="webhook-field">`;
+        html += `<div class="webhook-field-name">${formatFieldName(key)}</div>`;
+        
+        if (value === null || value === undefined) {
+            html += `<div class="webhook-field-value">${formatValue(value)}</div>`;
+        } else if (Array.isArray(value)) {
+            if (value.length === 0) {
+                html += `<div class="webhook-field-value webhook-empty">No items</div>`;
+            } else {
+                html += generateArrayHtml(value);
+            }
+        } else if (typeof value === 'object') {
+            const subKeys = Object.keys(value);
+            if (subKeys.length === 0) {
+                html += `<div class="webhook-field-value webhook-empty">Empty object</div>`;
+            } else {
+                const toggleId = `toggle-${key.replace(/\s+/g, '-').toLowerCase()}-${Math.random().toString(36).substr(2, 5)}`;
+                
+                html += `<div>
+                    <a class="webhook-toggle" data-bs-toggle="collapse" href="#${toggleId}" role="button">
+                        <i class="fas fa-chevron-right me-1"></i> View details
+                    </a>
+                    <div class="collapse mt-2" id="${toggleId}">
+                        ${generateObjectHtml(value)}
+                    </div>
+                </div>`;
+            }
+        } else {
+            html += `<div class="webhook-field-value">${formatValue(value)}</div>`;
+        }
+        
+        html += `</div>`;
+        return html;
+    }
+    
+    // Generate HTML for an array
+    function generateArrayHtml(array) {
+        let html = '';
+        
+        if (array.length === 0) {
+            return `<div class="webhook-empty">Empty array</div>`;
+        }
+        
+        const toggleId = `toggle-array-${Math.random().toString(36).substr(2, 5)}`;
+        
+        // For arrays with many items, add a toggle
+        if (array.length > 3) {
+            html += `<div>
+                <a class="webhook-toggle" data-bs-toggle="collapse" href="#${toggleId}" role="button">
+                    <i class="fas fa-chevron-right me-1"></i> View ${array.length} items
+                </a>
+                <div class="collapse mt-2" id="${toggleId}">`;
+        }
+        
+        // Wrapper for items
+        html += `<div class="mt-2">`;
+        
+        // Generate each item
+        array.forEach((item, index) => {
+            html += `<div class="webhook-array-item">`;
+            html += `<div class="webhook-array-index">Item ${index + 1}</div>`;
+            
+            if (item === null || item === undefined) {
+                html += `<div class="webhook-field-value">${formatValue(item)}</div>`;
+            } else if (typeof item === 'object') {
+                if (Array.isArray(item)) {
+                    html += generateArrayHtml(item);
+                } else {
+                    html += generateObjectHtml(item);
+                }
+            } else {
+                html += `<div class="webhook-field-value">${formatValue(item)}</div>`;
+            }
+            
+            html += `</div>`;
+        });
+        
+        html += `</div>`;
+        
+        // Close toggle wrapper if needed
+        if (array.length > 3) {
+            html += `</div></div>`;
         }
         
         return html;
     }
 
-    // Initialize the JSON viewer when the page loads
+    // Initialize the webhook viewer when the page loads
     document.addEventListener('DOMContentLoaded', function() {
         const jsonData = {{ data|tojson }};
-        document.getElementById('jsonViewer').innerHTML = formatJSON(jsonData);
+        const viewerContainer = document.getElementById('webhookViewer');
+        
+        // Generate the HTML for the Discord-style view
+        viewerContainer.innerHTML = generateObjectHtml(jsonData, true);
+        
+        // Initialize collapsible elements
+        document.querySelectorAll('.webhook-toggle').forEach(toggle => {
+            toggle.addEventListener('click', function() {
+                const icon = this.querySelector('i');
+                if (icon) {
+                    if (icon.classList.contains('fa-chevron-right')) {
+                        icon.classList.replace('fa-chevron-right', 'fa-chevron-down');
+                    } else {
+                        icon.classList.replace('fa-chevron-down', 'fa-chevron-right');
+                    }
+                }
+            });
+        });
     });
 </script>
 {% endblock %}

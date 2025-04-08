@@ -5,6 +5,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    background-color: #F9F9F9;
 }
 
 .footer {
@@ -18,21 +19,32 @@ body {
     transition: all 0.3s ease;
 }
 
-/* JSON viewer enhancements */
-.json-viewer {
-    overflow-x: auto;
-    line-height: 1.5;
-    word-break: break-word;
+/* Discord-inspired styling for cards */
+.webhook-card {
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.webhook-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Tab navigation styles */
 .nav-tabs .nav-link {
     color: #6c757d;
+    border-radius: 4px 4px 0 0;
+    padding: 0.75rem 1.25rem;
 }
 
 .nav-tabs .nav-link.active {
     font-weight: 500;
-    color: #212529;
+    color: #5865F2;
+    border-bottom: 2px solid #5865F2;
+}
+
+.nav-tabs .nav-link:hover:not(.active) {
+    background-color: rgba(88, 101, 242, 0.05);
+    border-color: transparent;
 }
 
 /* Table styles */
@@ -48,7 +60,38 @@ body {
 
 /* Alert styling */
 .alert-info {
-    border-left: 4px solid #0d6efd;
+    border-left: 4px solid #5865F2;
+    background-color: rgba(88, 101, 242, 0.05);
+    color: #2E3338;
+}
+
+.alert-light {
+    background-color: white;
+    border: 1px solid #EBEDEF;
+    border-radius: 8px;
+}
+
+/* Navbar customization */
+.navbar-dark.bg-primary {
+    background-color: #5865F2 !important;
+}
+
+/* Button styling */
+.btn-primary {
+    background-color: #5865F2;
+    border-color: #5865F2;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: #4752C4;
+    border-color: #4752C4;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #F2F3F5;
+    color: #4F5660;
+    border-color: #DCDDDE;
 }
 
 /* Responsive adjustments */
@@ -59,5 +102,13 @@ body {
     
     .btn-sm {
         margin-bottom: 5px;
+    }
+    
+    .webhook-card {
+        margin-bottom: 12px;
+    }
+    
+    .webhook-field-name {
+        font-size: 0.8rem;
     }
 }
